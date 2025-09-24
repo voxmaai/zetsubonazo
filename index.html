@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>謎解き - 絶望に導かれし謎 -</title>
+<style>
+  :root{--bg:#111;--panel:#1b1b1b;--muted:#aaa;--accent:#2a4;}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;background:var(--bg);color:#eee;}
+  .app{display:flex;min-height:100vh;}
+  .sidebar{width:220px;background:#222;padding:16px;box-sizing:border-box;overflow:auto;}
+  .sidebar h2{margin:0 0 12px;font-size:16px;}
+  .stage{padding:8px;border-radius:6px;background:#333;margin-bottom:8px;cursor:pointer;}
+  .stage.locked{background:#444;cursor:default;opacity:0.8;}
+  .stage.solved{background:var(--accent);}
+  .main{flex:1;display:flex;gap:18px;padding:18px;box-sizing:border-box;align-items:flex-start;}
+  .content{flex:1;min-width:0;}
+  .topbar{display:flex;align-items:center;justify-content:flex-start;gap:20px;margin-bottom:12px;}
+  .stageTitle{font-size:20px;min-width:160px;}
+  #scoreBoard{font-size:18px;min-width:120px;display:none;}
+  #timerBoard{font-size:18px;min-width:160px;}
+  .questionArea{background:transparent;border-radius:8px;padding: 0;text-align:center;}
+  .questionArea img{max-width:90%;height:auto;border-radius:8px;display:block;margin: 0 auto;transform:scale(0.9);}
+  .inputRow{margin-top: 0;text-align:center;}
+  input[type=text]{padding:8px;width:40%;max-width:360px;border-radius:6px;border:1px solid #333;background:#0f0f0f;color:#eee;}
+  button{padding:8px 12px;border-radius:6px;border:0;background:#444;color:#fff;cursor:pointer;margin-left:6px;}
+  button:disabled{opacity:0.5;pointer-events:none;background:#333;}
+  .resultMsg{height:28px;text-align:center;font-weight:700;margin-top:8px;font-size:20px;}
+  .hintPanel{width:360px;background:var(--panel);padding:12px;border-radius:8px;box-sizing:border-box;align-self:flex-start;}
+  .hintPanel h3{margin:0 0 8px;font-size:16px;}
+  .hintButtons{display:flex;flex-direction:column;gap:8px;align-items:flex-start;}
+  .hintText{margin-top:12px;white-space:pre-wrap;color:var(--muted);min-height:48px;text-align:left;}
+  .confirmBox{background:#222;padding:10px;border-radius:8px;margin-top:12px;text-align:center;}
+  .centerBtn{display:block;margin:14px auto;padding:10px 18px;border-radius:8px;}
+  /* Xポストボタンだけコンパクト */
+  a.centerBtn {
+    display: inline-block;
+    margin: 14px auto;
+    padding: 6px 12px;
+    background: #1da1f2;
+    color: #fff !important;
+    text-decoration: none;
+    font-weight: bold;
+  }
+  a.centerBtn:hover { background:#0d8ddb; }
+  @media(max-width:900px){
+    .hintPanel{width:260px;}
+    input[type=text]{width:60%;}
+  }
+  .questionArea ul, .questionArea h2, .questionArea p { text-align: left; }
+#timerBoard, #scoreBoard {
+  display: none;
+}
+input[type=text]:disabled {
+  background: #1a1a1a;  /* 背景を暗めに */
+  color: #777;          /* 文字を薄いグレーに */
+  border: 1px solid #444;
+}
+.hintBlock {
+  margin-bottom: 12px;
+}
+.hintBlock button {
+  display: block;
+  margin-bottom: 4px;
+}
+.hintContent {
+  color: var(--muted);
+  white-space: pre-wrap;
+  text-align: left;
+}
+.hintText,
+.hintContent {
+  color: #eee;   /* 明るい色に統一 */
+  white-space: pre-wrap;
+  text-align: left;
+}
+
+</style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h2>問題一覧</h2>
+      <div id="stages"></div>
+    </aside>
+
+    <div class="main">
+      <div class="content">
+        <div class="topbar">
+          <div class="stageTitle" id="stageTitle">—</div>
+          <div id="scoreBoard">得点: 0</div>
+          <div id="timerBoard">残り時間: 80:00</div>
+        </div>
+        <div class="questionArea" id="questionArea"></div>
+        <div id="resultContainer"></div>
+        <div id="confirmArea"></div>
+      </div>
+      <aside class="hintPanel" id="hintPanel">
+        <h3>ヒント</h3>
+        <div class="hintButtons" id="hintButtons"></div>
+        <div class="hintText" id="hintArea"></div>
+        <div id="hintConfirmArea"></div>
+      </aside>
+    </div>
+  </div>
+<script>
+/* ========== puzzles 配列 ========== */
+const puzzles = [
+{ type:"rule1", title:"ルール①", content:
+`<h1 style="text-align:center; font-size:2.2em; margin-bottom:8px;">
+  謎解き ~絶望に導かれし謎~
+</h1>
+<p style="text-align:center; font-size:1em; margin-bottom:20px; color:gray;">
+  製作者：ぼっくす
+</p>
+<h2>ルール①</h2>
+<ul>
+<li>制限時間は80分である．</li>
+<li>問題は全部で10問ある．</li>
+<li>わからない場合はヒントを使うことができる．</li>
+<li>ヒントはいつでも使えるが，1つ使うごとに10ptマイナスされる．</li>
+<li>ヒントはQ1-Q5は1回，Q6-Q9は2回，Q10は3回使える．</li>
+<li>複数ヒントがある場合はヒント１から順に使うこと．</li>
+<li>謎に正解するとQ1-Q5は20pt，Q6-Q9は50pt得られる．(Q10の得点は後ほど)</li>
+<li>Q10を解くと終了し，そのときの得点でランク分岐する．</li>
+<li>もちろん<b>点数が高いほどいいエンディングが得られる</b>．</li>
+<li>いくつかは複雑な謎があるので，紙とペンの用意を推奨する．</li>
+</ul>
+<div style="text-align:center;margin-top:16px;">
+  <button id="startBtn" class="centerBtn">スタート</button>
+</div>
+
+<div style="text-align:center; margin-top:24px; font-size:0.9em; color:gray;">
+  不具合を見つけた方は 
+  <a href="https://forms.gle/EgcKQfxbmLMXfuXq8" target="_blank" style="color:#4af;">こちらのフォーム</a> 
+  からご報告ください．
+</div>
+
+` },
+
+
+  { type:"quiz", title:"第1問", img:"Q1.jpg", answers:["おばけ","お化け","オバケ"], hint:["各ひらがなの周りの枠をよく見ましょう。"], point:20 },
+  { type:"quiz", title:"第2問", img:"Q2.jpg", answers:["ノート","のーと"], hint:["間の文字ではなく線でつないで読むと？"], point:20 },
+  { type:"quiz", title:"第3問", img:"Q3.jpg", answers:["文化祭","ぶんかさい","ブンカサイ"], hint:["下の方に三角形があると思います。"], point:20 },
+  { type:"quiz", title:"第4問", img:"Q4.jpg", answers:["心"], hint:["紫は赤＋青です。"], point:20 },
+  { type:"quiz", title:"第5問", img:"Q5.jpg", answers:["初恋","はつこい","ハツコイ"], hint:["左の縦はおなかがすいているときに用いる表現。"], point:20 },
+
+  { type:"quiz2", title:"第6問", img:"Q6.jpg", answers:["飛行機"], hint:["黒いところを見てはいけない。","隣接している黒同士の図形の境界の白線に着目。"], point:50 },
+  { type:"quiz2", title:"第7問", img:"Q7.jpg", answers:["ねぎま","ネギマ","葱間"], hint:["県の名前を入れる。","鳥取，熊本，福島"], point:50 },
+  { type:"quiz2", title:"第8問", img:"Q8.jpg", answers:["たいえき","体液","タイエキ"], hint:["理科で出てくる。","状態変化。"], point:50 },
+  { type:"quiz2", title:"第9問", img:"Q9.jpg", answers:["ささみ","笹身","ササミ"], hint:["Q9だけでは解けない。","Q1-Q8の中で赤赤青が使えそう。"], point:50 },
+
+  { type:"rule2", title:"ルール②", content:
+`<h2>Q10(最終問題)のルール</h2>
+<ul>
+<li>Q10は2つの答えを用意している．</li>
+<li>易しい方の答えをA，難しい方の答えをBとしよう．</li>
+<li>先にBを答えたら、<b>得点に150ptプラスしてゲームを終了する</b>．</li>
+<li>誤って先にAを答えた場合、<b>得点に-1倍乗算</b>される．</li>
+<li>ただし，その後制限時間内にBを答えた場合，<b>もう一度得点に-1倍乗算</b>されゲームを終了する．</li>
+<li>また，Q10のヒントはすべてAを導くためのものだ．Bを導きたけりゃ自力で頑張るんだな．</li>
+</ul>
+<div style="text-align:center;margin-top:12px;"><button id="finalBtn" class="centerBtn">最終問題へ</button></div>` },
+
+  { type:"quiz10", title:"第10問(最終問題)", img:"Q10.jpg",
+    answersA:["絶望","ぜつぼう","ゼツボウ"], answersB:["起死回生","きしかいせい","キシカイセイ"],
+    hint:["各問題番号と四隅のひらがなを用いる。","赤い４マスは同じ形がどこかにある。","赤い４マスはQ5の赤い４マス。Q1,Q5,Q6,Q7が使える。"], point:0 },
+
+  { type:"gameover", title:"GAME OVER", content:"" },
+  { type:"clear", title:"GAME CLEAR", content:"" },
+  { type:"ending", title:"エンディング", content:"" }
+];
+
+/* ========== 状態管理 ========== */
+let current=0, score=0, started=false, q10Aflag=false, timer=null, remaining=80*60;
+const state={solved:Array(puzzles.length).fill(false),hintsUsed:Array(puzzles.length).fill(0),
+             lastAnswer:Array(puzzles.length).fill(""),startClicked:false,finalClicked:false,unlocked:0,
+             showClear:false,showOver:false,  
+rule2Paused:false   // ★ ルール②で一度だけタイマーを止めたかどうか
+};
+
+/* ★ ここから関数群（前回提示したものと同じ）をすべて入れてください ★
+   - messageBuffer / showMessage
+   - buildSidebar / render / renderHintPanel / askHintConfirm
+   - startTimer / updateTimerDisplay
+   - showGameOver / showGameClear
+   - getEndingContent（省略せず全文）
+   - checkAnswer
+   - イベント処理（document.body.addEventListener）
+   - 初期表示 render();
+*/
+
+/* ========== エンディング分岐（全文記述） ========== */
+function getEndingContent(isClear){
+  let rank="", percent=0, comment="", endTitle="";
+  let shareText="";
+
+  if(isClear){
+    if(score === 460){
+      rank="Ex.S"; percent=100;
+      comment="素晴らしすぎる！これは製作者ぼっくすも参りました！<br>この隠しエンディングにたどり着けたのはすごい！<br>ぜひみんなに自慢しよう！";
+      endTitle="END①：絶望を乗り越えし者";
+      shareText=`絶望に導かれし謎を\nEx.S Rank(達成度100%)でクリアしました！\nhttps://voxmaai.github.io/zetsubonazo/\n#謎解き #絶望謎`;
+    } else if(score === 450){
+      rank="S"; percent=99.9;
+      comment="ノーヒントクリアおめでとう！素晴らしいひらめきでした！<br>どうやら、この謎解きには隠しエンディングがあるらしい？<br>またの挑戦をお待ちしております！";
+      endTitle="END②：ノーヒントクリア！";
+      shareText=`絶望に導かれし謎を\nS Rank(達成度99.9%)でクリアしました！\nhttps://voxmaai.github.io/zetsubonazo/\n#謎解き #絶望謎`;
+    } else if(score >= 400){
+      rank="A"; percent=95;
+      comment="あなたはどうやら途中でヒントを使ってしまったようだ。<br>けど最後まで謎を完遂できたことは誇っていい。<br>まぁ，プラスで終えられたからいっか！<br>またの挑戦をお待ちしております！";
+      endTitle="END③：とりあえずクリア！";
+      shareText=`絶望に導かれし謎を\nA Rank(達成度95%)でクリアしました！\nhttps://voxmaai.github.io/zetsubonazo/\n#謎解き #絶望謎`;
+    } else {
+      rank="B"; percent=90;
+      comment="あなたはちょっとヒントを使いすぎたか絶望に導かれたか。<br>まぁ，とりあえずプラスで終えられたからいっか！<br>またの挑戦をお待ちしております！";
+      endTitle="END④：まぁまぁまぁ";
+      shareText=`絶望に導かれし謎を\nB Rank(達成度90%)でクリアしました！\nhttps://voxmaai.github.io/zetsubonazo/\n#謎解き #絶望謎`;
+    }
+  } else {
+    if(score > 0){
+      rank="C"; percent=50;
+      comment="あなたは最終問題を解くことができなかった。<br>絶望を恐れて１歩を踏み出せなかったか？<br>残念でしたね。またの挑戦をお待ちしております！";
+      endTitle="END⑤：絶望を恐れちゃった";
+      shareText=`絶望に導かれし謎を\nC Rank(達成度50%)で終えました…\nhttps://voxmaai.github.io/zetsubonazo/\n#謎解き #絶望謎`;
+    } else {
+      rank="F"; percent=0;
+      comment="あなたは絶望に飲み込まれた。<br>残念ながらこれはゲームオーバーだ。<br>またの挑戦をお待ちしております！";
+      endTitle="END⑥：絶望を恐れちゃった";
+      shareText=`絶望に導かれし謎を\nF Rank(達成度0%)で終えました…\nhttps://voxmaai.github.io/zetsubonazo/\n#謎解き #絶望謎`;
+    }
+  }
+
+  return `<div style="text-align:center;">
+    <h2>${isClear ? "GAME CLEAR" : "GAME OVER"}</h2>
+    <p>最終得点: <b>${score}</b> 点</p>
+    <p>Rank: <b>${rank}</b></p>
+    <p>達成度: ${percent}%</p>
+    <p>${comment}</p>
+    <p><b>${endTitle}</b></p>
+    <a class="centerBtn" target="_blank"
+       href="https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}">
+       Xでシェア
+    </a>
+    <button id="restartBtn" class="centerBtn">はじめからやり直す</button>
+  </div>`;
+}
+
+
+/* メッセージバッファ */
+const messageBuffer = { text:"", color:"", timer:null };
+function updateResultMsg() {
+  const el=document.getElementById("resultMsg");
+  if(!el) return;
+  el.innerText=messageBuffer.text;
+  el.style.color=messageBuffer.color||"#fff";
+}
+function showMessage(msg,color="#fff"){
+  messageBuffer.text=msg; messageBuffer.color=color; updateResultMsg();
+  if(messageBuffer.timer) clearTimeout(messageBuffer.timer);
+  messageBuffer.timer=setTimeout(()=>{messageBuffer.text="";messageBuffer.color="";updateResultMsg();messageBuffer.timer=null;},1000);
+}
+
+/* サイドバー生成 */
+function buildSidebar(){
+  const el=document.getElementById("stages"); el.innerHTML="";
+  puzzles.forEach((p,i)=>{
+    if(p.type==="rule2" && !state.solved[9]) return;
+    if(p.type==="ending") return;
+    if(p.type==="gameover" && !state.showOver) return;
+    if(p.type==="clear" && !state.showClear) return;
+
+    let show=true;
+    if(!state.startClicked && p.type!=="rule1") show=false;
+    if(p.type!=="rule1" && p.type!=="rule2" && p.type!=="gameover" && p.type!=="clear"){
+      if(i>state.unlocked) show=false;
+    }
+    if(!show) return;
+
+    const d=document.createElement("div");
+    d.className="stage"+(state.solved[i]?" solved":"");
+    d.innerText=p.title;
+d.addEventListener("click",()=>{
+  // ★もしQ10に入るならフラグをリセット
+  if (p && p.type === "quiz10") {
+  }
+  current=i;
+  render();
+});
+    el.appendChild(d);
+  });
+}
+
+/* レンダリング */
+function render(){
+  const p = puzzles[current];
+
+  // 左上タイトル：ルール①のときは非表示
+  document.getElementById("stageTitle").innerText = (current === 0 ? "" : (p.title || "—"));
+
+  // スコア表示は started に依存
+  document.getElementById("scoreBoard").style.display = started ? "block" : "none";
+  document.getElementById("scoreBoard").innerText = "得点: " + score;
+
+  // タイマー表示は「ルール①以外」かつ started=true の場合のみ更新
+  if(current !== 0 && started){
+    if(typeof updateTimerDisplay === "function") updateTimerDisplay();
+    document.getElementById("timerBoard").style.display = "block";
+  } else {
+    document.getElementById("timerBoard").style.display = "none";
+  }
+
+  // メイン質問エリア初期化
+  const qArea = document.getElementById("questionArea");
+  qArea.innerHTML = "";
+
+  // ヒントパネルを初期化
+  const hintPanel = document.getElementById("hintPanel");
+if(hintPanel){
+  if(current === 0 || p.type === "rule2" || p.type === "gameover" || p.type === "clear" || p.type === "ending"){
+    // ★ ルール①・ルール②・GAME OVER・GAME CLEAR・エンディングでは見出しを消す
+    hintPanel.innerHTML = `
+      <div id="hintButtons"></div>
+      <div id="hintArea"></div>
+      <div id="hintConfirmArea"></div>
+    `;
+  } else {
+    // 通常時は見出し＋ヒント領域を表示
+    hintPanel.innerHTML = `
+      <h3>ヒント</h3>
+      <div id="hintButtons"></div>
+      <div id="hintArea"></div>
+      <div id="hintConfirmArea"></div>
+    `;
+    if(typeof renderHintPanel === "function"){
+      renderHintPanel(p,current);
+    }
+  }
+}
+
+
+
+  // ページタイプごとの処理
+if(p.type === "rule1" || p.type === "rule2" || p.type === "gameover" || p.type === "clear"){
+  qArea.innerHTML = p.content || "";
+
+  // ★ 初めてルール②を開いたらタイマーを止める
+  if(p.type === "rule2" && !state.rule2Paused){
+    if(timer){ clearInterval(timer); timer=null; }
+    state.rule2Paused = true;
+  }
+}
+  else if(p.type === "quiz" || p.type === "quiz2" || p.type === "quiz10"){
+    // 問題ページ
+    if(p.img){
+      const img = document.createElement("img");
+      img.src = p.img;
+      img.alt = p.title || "";
+      img.style.maxWidth = "90%";
+      img.style.display = "block";
+      img.style.margin = "0 auto";
+      qArea.appendChild(img);
+    }
+
+    const inputRow = document.createElement("div");
+    inputRow.className = "inputRow";
+
+const input = document.createElement("input");
+input.type = "text";
+input.id = "answerInput";
+input.placeholder = "答えを入力";
+input.setAttribute("maxlength", "20");
+
+// 入力中（通常キー）を制御
+input.addEventListener("beforeinput", (e) => {
+  const cur = input.value;
+  const selection = input.selectionEnd - input.selectionStart;
+  const newLen = cur.length - selection + (e.data ? e.data.length : 0);
+
+  if (newLen > 20) {
+    e.preventDefault();
+  }
+});
+
+// ★ IME変換確定時も20文字に制御
+input.addEventListener("compositionend", () => {
+  if (input.value.length > 20) {
+    input.value = input.value.slice(0, 20);
+  }
+});
+
+// 貼り付け時も制御
+input.addEventListener("paste", (e) => {
+  e.preventDefault();
+  const paste = (e.clipboardData || window.clipboardData).getData("text") || "";
+  const allowed = paste.slice(0, 20 - input.value.length);
+  document.execCommand("insertText", false, allowed);
+});
+
+// 入力中も常に20文字以内に制限（全角も含む）
+input.addEventListener("input", () => {
+  if (input.value.length > 20) {
+    input.value = input.value.slice(0, 20);
+  }
+});
+
+
+
+// ★ 修正追加: 正解済みなら入力欄も編集不可にする
+if (state.solved[current]) {
+  input.disabled = true;
+}
+
+// ★ Enterキーで送信できるようにする
+input.addEventListener("keydown", function(e){
+  if(e.key === "Enter"){
+    e.preventDefault();
+    const btn = document.getElementById("submitBtn");
+    if(btn && !btn.disabled){
+      btn.click();
+    }
+  }
+});
+
+const submit = document.createElement("button");
+submit.id = "submitBtn";
+submit.innerText = "送信";
+// 解答済みならボタンを無効化（見た目が薄くなりクリック不可）
+submit.disabled = !!state.solved[current];
+// submit のクリックは document.body のクリックハンドラで処理するため、
+ // ここでは onclick を設定しない（重複呼び出し防止）。
+
+inputRow.appendChild(input);
+inputRow.appendChild(submit);
+qArea.appendChild(inputRow);
+    
+// ★ 正解時に最後の答えを表示して入力不可にする（グレー表示）
+if (state.solved[current]) {
+  try {
+    input.value = state.lastAnswer[current] || "";
+    input.disabled = true;
+    input.style.color = "#777";
+    submit.disabled = true;
+  } catch(e){}
+}
+const res = document.createElement("div");
+    res.id = "resultMsg";
+    res.className = "resultMsg";
+    qArea.appendChild(res);
+  }
+  else if(p.type === "ending"){
+    // エンディングページ
+    qArea.innerHTML = p.content || "";
+  }
+
+  // サイドバーを再構築
+  if(typeof buildSidebar === "function") buildSidebar();
+
+  // ボタン無効化処理
+  setTimeout(()=>{
+    const startBtn = document.getElementById("startBtn");
+    if(startBtn && state.startClicked){
+      startBtn.disabled = true;
+      startBtn.style.background="#444";
+      startBtn.style.pointerEvents="none";
+    }
+    const finalBtn = document.getElementById("finalBtn");
+    if(finalBtn && state.finalClicked){
+      finalBtn.disabled = true;
+      finalBtn.style.background="#444";
+      finalBtn.style.pointerEvents="none";
+    }
+  }, 0);
+  // ★ メッセージを再描画（正解！や間違っているが消えないようにする）
+  updateResultMsg();
+}
+
+
+/* ヒントパネル */
+function renderHintPanel(p, pIndex){
+  const btnArea = document.getElementById("hintButtons");
+  const used = state.hintsUsed[pIndex] || 0;
+  btnArea.innerHTML = "";
+
+  // Q1〜Q5
+  if(p.type === "quiz" && p.hint){
+    let block = document.createElement("div");
+    block.className = "hintBlock";
+
+    let b=document.createElement("button");
+    b.innerText="ヒントを使う";
+    b.disabled = used >= 1;
+    b.onclick=()=>askHintConfirm(pIndex, 0);
+
+    let content=document.createElement("div");
+    content.className="hintContent";
+    if(used >= 1){
+      content.innerText = p.hint[0];   // ★ 使用済みなら表示
+    }
+
+    block.appendChild(b);
+    block.appendChild(content);
+    btnArea.appendChild(block);
+  }
+
+  // Q6〜Q9
+  if(p.type === "quiz2" && p.hint){
+    p.hint.forEach((h, i)=>{
+      let block = document.createElement("div");
+      block.className="hintBlock";
+
+      let b=document.createElement("button");
+      b.innerText = "ヒント" + (i+1) + "を使う";
+      b.disabled = (used < i) || (used >= i+1);
+      b.onclick=()=>askHintConfirm(pIndex, i);
+
+      let content=document.createElement("div");
+      content.className="hintContent";
+      if(used >= i+1){
+        content.innerText = h;   // ★ 使用済みなら表示
+      }
+
+      block.appendChild(b);
+      block.appendChild(content);
+      btnArea.appendChild(block);
+    });
+  }
+
+  // Q10
+  if(p.type === "quiz10" && p.hint){
+    p.hint.forEach((h, i)=>{
+      let block = document.createElement("div");
+      block.className="hintBlock";
+
+      let b=document.createElement("button");
+      b.innerText = "ヒント" + (i+1) + "を使う";
+      b.disabled = (used < i) || (used >= i+1);
+      b.onclick=()=>askHintConfirm(pIndex, i);
+
+      let content=document.createElement("div");
+      content.className="hintContent";
+      if(used >= i+1){
+        content.innerText = h;   // ★ 使用済みなら表示
+      }
+
+      block.appendChild(b);
+      block.appendChild(content);
+      btnArea.appendChild(block);
+    });
+  }
+}
+
+
+/* 実際にヒントを表示する処理 */
+function showHint(pIndex, hintIndex){
+  const p = puzzles[pIndex];
+  state.hintsUsed[pIndex] = Math.max(state.hintsUsed[pIndex], hintIndex+1);
+  score -= 10;
+  document.getElementById("scoreBoard").innerText = "得点: " + score;
+
+  // Q6以降とQ10は renderHintPanel を更新する
+  if(p.type === "quiz2" || p.type === "quiz10"){
+    renderHintPanel(p, pIndex);
+  }
+  // Q1〜Q5 の場合はボタンを無効化＋hintAreaに表示
+  else if(p.type === "quiz"){
+    const btn = document.querySelector("#hintButtons button");
+    if(btn) btn.disabled = true;
+    const hintArea = document.getElementById("hintArea");
+    hintArea.innerText = p.hint[hintIndex] || "";
+  }
+}
+
+/* ヒント使用処理 */
+function useHint(p, idx){
+  const puzzleIndex = puzzles.indexOf(p);
+  askHintConfirm(puzzleIndex, idx);
+}
+
+/* ヒント確認 */
+function askHintConfirm(pIndex, hintIndex){
+  const confirmArea = document.getElementById("hintConfirmArea");
+  const p = puzzles[pIndex];
+
+  // Q1〜Q5は「ヒント」、Q6〜Q10は「ヒント1/2/3」
+  let hintLabel = (p.type === "quiz") ? "ヒント" : `ヒント${hintIndex+1}`;
+
+  confirmArea.innerHTML=`
+    <div class="confirmBox">
+      <p>${hintLabel}を使用してもよいですか？<br>「はい」を選択すると10点減点されます</p>
+      <button id="confirmYes">はい</button>
+      <button id="confirmNo">いいえ</button>
+    </div>`;
+
+  document.getElementById("confirmYes").onclick=()=>{
+    confirmArea.innerHTML="";
+    showHint(pIndex, hintIndex);
+  };
+  document.getElementById("confirmNo").onclick=()=>{
+    confirmArea.innerHTML="";
+  };
+}
+
+/* タイマー */
+function startTimer(){remaining=80*60;updateTimerDisplay();
+  if(timer){clearInterval(timer);}timer=setInterval(()=>{remaining--;updateTimerDisplay();if(remaining<=0){clearInterval(timer);timer=null;showGameOver();}},1000);}function updateTimerDisplay(){const m=String(Math.floor(remaining/60)).padStart(2,"0");const s=String(remaining%60).padStart(2,"0");document.getElementById("timerBoard").innerText=`残り時間: ${m}:${s}`;}
+
+/* GAME OVER/CLEAR */
+function showGameOver(){if(timer){clearInterval(timer);}state.showOver=true;current=puzzles.findIndex(x=>x.type==="gameover");puzzles[current].content=`<h2 style="color:red;">GAME OVER</h2><p>時間切れです…</p><p>最終得点は ${score} 点</p><button id="endingBtn" class="centerBtn">ランク・達成度を確認する</button>`;render();}
+function showGameClear(){if(timer){clearInterval(timer);}state.showClear=true;current=puzzles.findIndex(x=>x.type==="clear");puzzles[current].content=`<h2 style="color:lime;">GAME CLEAR</h2><p>最終得点は ${score} 点</p><button id="endingBtn" class="centerBtn">ランク・達成度を確認する</button>`;render();}
+
+// 入力を正規化（NFKC、全角スペース除去、全空白除去、カタカナ→ひらがな、小文字化）
+function normalizeInput(str){
+  if(!str) return "";
+  // 1) 互換正規化（全角→半角等を揃える）
+  let s = String(str).normalize('NFKC');
+  // 2) 全角スペース・あらゆる空白を削除
+  s = s.replace(/　/g, "").replace(/\s+/g, "");
+  // 3) カタカナ（U+30A1..U+30F6）をひらがなに変換
+  s = s.replace(/[\u30A1-\u30F6]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+  // 4) 英字が混ざる可能性に備え小文字化
+  s = s.toLowerCase();
+  return s;
+}
+
+/* 解答判定（改良版） */
+function checkAnswer(){
+  // ★ 二重送信防止（送信ボタンを一時的に無効化）
+  const submitBtn = document.getElementById("submitBtn");
+  if(submitBtn){
+    submitBtn.disabled = true;
+    setTimeout(()=>{ 
+      if(!state.solved[current]) submitBtn.disabled = false;
+    }, 500); // 0.5秒後に解除
+  }
+
+  const p = puzzles[current];
+  const raw = (document.getElementById("answerInput") || {value:""}).value;
+  if(!raw) return;
+
+
+  // 正規化済みの値（判定はこれを使う）
+  const val = normalizeInput(raw);
+
+
+
+  // 既に正解済みなら何もしない（送信ボタン自体は render() で無効化されている）
+  if (state.solved[current]) {
+    return;
+  }
+
+// Q10（特別処理）
+if(p.type === "quiz10"){
+  // --- 起死回生（B）判定 ---
+  if(p.answersB && p.answersB.some(x => normalizeInput(x) === val)){
+    if(q10Aflag){
+      // すでに絶望を答えているなら、もう一度 -1倍
+      score = Number(score) * -1;
+    } else {
+      // 絶望を答えていないなら +150
+      score = Number(score) + 150;
+    }
+    state.solved[current] = true;
+    state.lastAnswer[current] = raw;
+    document.getElementById("scoreBoard").innerText = "得点: " + score;
+    showMessage("正解！","lime");
+    const submitBtn = document.getElementById("submitBtn");
+    if (submitBtn) submitBtn.disabled = true;
+    showGameClear();
+    return;
+  }
+
+  // --- 絶望（A）判定 ---
+  if(p.answersA && p.answersA.some(x => normalizeInput(x) === val)){
+    if(!q10Aflag){
+      score = Number(score) * -1;
+      q10Aflag = true;
+      state.lastAnswer[current] = raw;
+      document.getElementById("scoreBoard").innerText = "得点: " + score;
+      showMessage("残念！得点をマイナスにさせてもらう！","violet");
+    } else {
+      showMessage("間違っているようだ","red");
+    }
+    return;
+  }
+
+  // --- それ以外は誤答 ---
+  showMessage("間違っているようだ","red");
+  return;
+}
+
+// 通常の問題（Q1〜Q9）
+  if(p.answers && p.answers.some(x => normalizeInput(x) === val)){
+    score += p.point;
+    state.solved[current] = true;
+    state.lastAnswer[current] = raw;
+    document.getElementById("scoreBoard").innerText = "得点: " + score;
+    showMessage("正解！","lime");
+
+    // 次の問題をアンロック
+    const solvedIndex = current;
+    if(solvedIndex + 1 < puzzles.length){
+      state.unlocked = Math.max(state.unlocked, solvedIndex + 1);
+    }
+    // Q9ならルール②を解放
+    if(solvedIndex === 9){
+      state.unlocked = Math.max(state.unlocked, 10);
+    }
+    // 次に進む
+    if(solvedIndex + 1 < puzzles.length){
+      current = solvedIndex + 1;
+    }
+
+    render();
+  } else {
+    showMessage("間違っているようだ","red");
+  }
+}
+
+
+/* イベント */
+document.body.addEventListener("click",e=>{
+  const id=e.target.id;
+  if(id==="startBtn"){
+  if(state.startClicked) return;
+  state.startClicked=true;
+  started=true;
+  score=0;
+  state.solved.fill(false);
+  state.hintsUsed.fill(0);
+  state.lastAnswer.fill("");
+  state.unlocked=1;
+  current=1;
+
+  // ★ 隠していた要素を表示する
+  document.getElementById("timerBoard").style.display="block";
+  document.getElementById("scoreBoard").style.display="block";
+  document.getElementById("hintButtons").style.display="block";
+  document.getElementById("hintArea").style.display="block";
+
+  startTimer();
+  render();
+  return;
+}
+
+if(id==="submitBtn"){
+  const input=document.getElementById("answerInput");
+  if(!input)return;
+  checkAnswer();   // ← 引数なしでOK
+  return;
+}
+
+  // --- ここに finalBtn の処理を追加しました ---
+if(id==="finalBtn"){ 
+  if(state.finalClicked) return;
+  state.finalClicked = true; 
+  state.unlocked = Math.max(state.unlocked, 11);
+  current = puzzles.findIndex(x=>x.type==="quiz10");
+
+  // ★ タイマーを再スタート
+  if(!timer){
+    timer = setInterval(()=>{
+      remaining--;
+      updateTimerDisplay();
+      if(remaining<=0){
+        clearInterval(timer);
+        timer=null;
+        showGameOver();
+      }
+    },1000);
+  }
+
+  // ★ Q10 に入る時にリセット
+
+  render();
+  return;
+}
+
+
+  if(id==="endingBtn"){const isClear=(puzzles[current].type==="clear");current=puzzles.findIndex(x=>x.type==="ending");puzzles[current].content=getEndingContent(isClear);render();return;}
+  if(id==="restartBtn"){score=0;state.solved.fill(false);state.hintsUsed.fill(0);state.lastAnswer.fill("");state.startClicked=false;state.finalClicked=false;state.unlocked=0;state.showClear=false;state.showOver=false;started=false;current=0;  q10Aflag=false;
+  state.rule2Paused=false;if(timer){clearInterval(timer);timer=null;}remaining=80*60;updateTimerDisplay();render();return;}
+});
+
+/* 初期表示 */
+render();
+
+</script>
+</body>
+</html>
