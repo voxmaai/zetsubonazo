@@ -75,6 +75,7 @@ input[type=text]:disabled {
   text-align: left;
 }
 
+.hintPanel.disabled{opacity:0.5;pointer-events:none;}
 </style>
 </head>
 <body>
@@ -579,7 +580,8 @@ function useHint(p, idx){
 
 /* ヒント確認 */
 function askHintConfirm(pIndex, hintIndex){
-  const confirmArea = document.getElementById("hintConfirmArea");
+  if(gameEnded) return;
+    const confirmArea = document.getElementById("hintConfirmArea");
   const p = puzzles[pIndex];
 
   // Q1〜Q5は「ヒント」、Q6〜Q10は「ヒント1/2/3」
@@ -606,8 +608,10 @@ function startTimer(){remaining=80*60;updateTimerDisplay();
   if(timer){clearInterval(timer);}timer=setInterval(()=>{remaining--;updateTimerDisplay();if(remaining<=0){clearInterval(timer);timer=null;showGameOver();}},1000);}function updateTimerDisplay(){const m=String(Math.floor(remaining/60)).padStart(2,"0");const s=String(remaining%60).padStart(2,"0");document.getElementById("timerBoard").innerText=`残り時間: ${m}:${s}`;}
 
 /* GAME OVER/CLEAR */
-function showGameOver(){if(timer){clearInterval(timer);}state.showOver=true;current=puzzles.findIndex(x=>x.type==="gameover");puzzles[current].content=`<h2 style="color:red;">GAME OVER</h2><p>時間切れです…</p><p>最終得点は ${score} 点</p><button id="endingBtn" class="centerBtn">ランク・達成度を確認する</button>`;render();}
-function showGameClear(){if(timer){clearInterval(timer);}state.showClear=true;current=puzzles.findIndex(x=>x.type==="clear");puzzles[current].content=`<h2 style="color:lime;">GAME CLEAR</h2><p>最終得点は ${score} 点</p><button id="endingBtn" class="centerBtn">ランク・達成度を確認する</button>`;render();}
+function showGameOver(){if(timer){clearInterval(timer);}state.showOver=true;current=puzzles.findIndex(x=>x.type==="gameover");puzzles[current].content=`<h2 style="color:red;">GAME OVER</h2><p>時間切れです…</p><p>最終得点は ${score} 点</p><button id="endingBtn" class="centerBtn">ランク・達成度を確認する</button>`;render();
+  document.getElementById("hintPanel").classList.add("disabled");}
+function showGameClear(){if(timer){clearInterval(timer);}state.showClear=true;current=puzzles.findIndex(x=>x.type==="clear");puzzles[current].content=`<h2 style="color:lime;">GAME CLEAR</h2><p>最終得点は ${score} 点</p><button id="endingBtn" class="centerBtn">ランク・達成度を確認する</button>`;render();
+  document.getElementById("hintPanel").classList.add("disabled");}
 
 // 入力を正規化（NFKC、全角スペース除去、全空白除去、カタカナ→ひらがな、小文字化）
 function normalizeInput(str){
@@ -777,9 +781,11 @@ if(id==="finalBtn"){
 }
 
 
-  if(id==="endingBtn"){const isClear=(puzzles[current].type==="clear");current=puzzles.findIndex(x=>x.type==="ending");puzzles[current].content=getEndingContent(isClear);render();return;}
+  if(id==="endingBtn"){const isClear=(puzzles[current].type==="clear");current=puzzles.findIndex(x=>x.type==="ending");puzzles[current].content=getEndingContent(isClear);gameEnded=true;
+render();return;}
   if(id==="restartBtn"){score=0;state.solved.fill(false);state.hintsUsed.fill(0);state.lastAnswer.fill("");state.startClicked=false;state.finalClicked=false;state.unlocked=0;state.showClear=false;state.showOver=false;started=false;current=0;  q10Aflag=false;
-  state.rule2Paused=false;if(timer){clearInterval(timer);timer=null;}remaining=80*60;updateTimerDisplay();render();return;}
+  state.rule2Paused=false;if(timer){clearInterval(timer);timer=null;}remaining=80*60;updateTimerDisplay();render();
+    document.getElementById("hintPanel").classList.remove("disabled");return;}
 });
 
 /* 初期表示 */
