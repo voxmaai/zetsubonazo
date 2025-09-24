@@ -177,6 +177,7 @@ const puzzles = [
 
 /* ========== 状態管理 ========== */
 let current=0, score=0, started=false, q10Aflag=false, timer=null, remaining=80*60;
+let gameEnded=false;
 const state={solved:Array(puzzles.length).fill(false),hintsUsed:Array(puzzles.length).fill(0),
              lastAnswer:Array(puzzles.length).fill(""),startClicked:false,finalClicked:false,unlocked:0,
              showClear:false,showOver:false,  
@@ -583,7 +584,7 @@ function useHint(p, idx){
 
 /* ヒント確認 */
 function askHintConfirm(pIndex, hintIndex){
-  if(gameEnded) return;
+  if (typeof gameEnded !== "undefined" && gameEnded) return;
     const confirmArea = document.getElementById("hintConfirmArea");
   const p = puzzles[pIndex];
 
@@ -786,7 +787,8 @@ if(id==="finalBtn"){
 
   if(id==="endingBtn"){const isClear=(puzzles[current].type==="clear");current=puzzles.findIndex(x=>x.type==="ending");puzzles[current].content=getEndingContent(isClear);gameEnded=true;
 render();return;}
-  if(id==="restartBtn"){score=0;state.solved.fill(false);state.hintsUsed.fill(0);state.lastAnswer.fill("");state.startClicked=false;state.finalClicked=false;state.unlocked=0;state.showClear=false;state.showOver=false;started=false;current=0;  q10Aflag=false;
+  if(id==="restartBtn"){
+  gameEnded=false;score=0;state.solved.fill(false);state.hintsUsed.fill(0);state.lastAnswer.fill("");state.startClicked=false;state.finalClicked=false;state.unlocked=0;state.showClear=false;state.showOver=false;started=false;current=0;  q10Aflag=false;
   state.rule2Paused=false;if(timer){clearInterval(timer);timer=null;}remaining=80*60;updateTimerDisplay();render();
     document.getElementById("hintPanel").classList.remove("disabled");return;}
 });
